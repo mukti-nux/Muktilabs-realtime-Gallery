@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  PHOTOGRAPHER
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PhotoStatus {
+  SYNCED
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+  REMOVED
+}
+
+enum VariantKind {
+  PREVIEW
+  THUMBNAIL
+}
+
+enum DownloadQuality {
+  SOCIAL
+  ORIGINAL
+}
+
+model User {
+  id        String        @id @default(uuid()) @db.Uuid
+  name      String
+  email     String        @unique
+  role      UserRole      @default(PHOTOGRAPHER)
+  photos    Photo[]
+  members   EventMember[]
+  createdAt DateTime      @default(now())
+}
+
+model Event {
+  id               String       @id @default(uuid()) @db.Uuid
+  title            String
+  slug             String       @unique
+  status           EventStatus  @default(DRAFT)
+  accessPinHash    String?      // future: jangan simpan PIN plaintext
+  immichAlbumId    String?      @unique @db.Uuid
+  watermarkPath    String?      // relative di GALLERY_CACHE_ROOT
+  watermarkVersion Int          @default(0)
+  lastSyncedAt     DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  photos           Photo[]
+  members          EventMember[]
+}
+
+model EventMember {
+  eventId String @db.Uuid
+  userId  String @db.Uuid
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([eventId, userId])
+}
+
+model Photo {
+  id             String      @id @default(uuid()) @db.Uuid
+  eventId        String      @db.Uuid
+  immichAssetId  String      @db.Uuid
+  photographerId String?     @db.Uuid
+  fileName       String
+  mimeType       String?
+  width          Int?
+  height         Int?
+  exif           Json?
+  status         PhotoStatus @default(SYNCED)
+  lastError      String?
+  lastSeenAt     DateTime     @default(now())
+  removedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  event          Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  photographer   User?       @relation(fields: [photographerId], references: [id], onDelete: SetNull)
+  variants       PhotoVariant[]
+  downloads      DownloadLog[]
+  @@unique([eventId, immichAssetId])
+  @@index([eventId, status])
+}
+
+model PhotoVariant {
+  id               String      @id @default(uuid()) @db.Uuid
+  photoId          String      @db.Uuid
+  kind             VariantKind
+  watermarkVersion Int
+  path             String      // relative terhadap GALLERY_CACHE_ROOT
+  width            Int
+  height           Int
+  createdAt        DateTime    @default(now())
+  photo            Photo       @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  @@unique([photoId, kind, watermarkVersion])
+}
+
+model DonationSettings {
+  id        Int      @id @default(1)
+  enabled   Boolean  @default(false)
+  message   String   @default("Donasi sukarela untuk perawatan peralatan dokumentasi")
+  qrisPath  String?  // file privat yang bisa disajikan lewat route aman
+  updatedAt DateTime @updatedAt
+}
+
+model DownloadLog {
+  id        String          @id @default(uuid()) @db.Uuid
+  photoId   String          @db.Uuid
+  quality   DownloadQuality
+  createdAt DateTime        @default(now())
+  photo     Photo           @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  @@index([photoId, createdAt])
+}

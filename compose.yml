@@ -1,0 +1,26 @@
+# Dev-only infrastructure. Production: use separate managed DB/Redis and a dedicated VM worker.
+services:
+  gallery-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gallery
+      POSTGRES_PASSWORD: ${GALLERY_DB_PASSWORD:?Set GALLERY_DB_PASSWORD}
+      POSTGRES_DB: gallery
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - gallery_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gallery -d gallery"]
+      interval: 5s
+      retries: 10
+  gallery-redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - gallery_redisdata:/data
+volumes:
+  gallery_pgdata:
+  gallery_redisdata:
